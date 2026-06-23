@@ -1,0 +1,450 @@
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local ContextActionService = game:GetService("ContextActionService")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local TweenService = game:GetService("TweenService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "CustomUI"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = playerGui
+
+local FULL_HEIGHT = 290
+local MINI_HEIGHT = 46  -- chỉ thu đến dòng title
+local isMinimized = false
+
+-- Main Frame
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "MainFrame"
+mainFrame.Size = UDim2.new(0, 420, 0, FULL_HEIGHT)
+mainFrame.Position = UDim2.new(0.5, -210, 0.5, -145)
+mainFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+mainFrame.BackgroundTransparency = 0.35
+mainFrame.BorderSizePixel = 0
+mainFrame.ClipsDescendants = true
+mainFrame.Parent = screenGui
+
+-- Line xanh clickable
+local topLine = Instance.new("TextButton")
+topLine.Size = UDim2.new(1, 0, 0, 4)
+topLine.Position = UDim2.new(0, 0, 0, 0)
+topLine.BackgroundColor3 = Color3.fromRGB(0, 180, 255)
+topLine.BorderSizePixel = 0
+topLine.Text = ""
+topLine.ZIndex = 10
+topLine.Parent = mainFrame
+
+-- Title (drag handle)
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -20, 0, 35)
+title.Position = UDim2.new(0, 10, 0, 10)
+title.BackgroundTransparency = 1
+title.Text = "Vuong.win movement script"
+title.TextColor3 = Color3.fromRGB(0, 198, 255)
+title.TextSize = 15
+title.Font = Enum.Font.Code
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = mainFrame
+
+-- Divider dưới title
+local divider = Instance.new("Frame")
+divider.Size = UDim2.new(1, 0, 0, 1)
+divider.Position = UDim2.new(0, 0, 0, 46)
+divider.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
+divider.BorderSizePixel = 0
+divider.Parent = mainFrame
+
+-- ===== VOID =====
+local voidActive = false
+local lastTeleport = 0
+local targetCFrame = nil
+local teleportCount = 0
+local VOID_MIN_Y = -220000
+local VOID_MAX_Y = -180000
+local BASE_SPREAD = 500
+local SPREAD_STEP = 800
+
+local voidBtn = Instance.new("TextButton")
+voidBtn.Size = UDim2.new(0, 160, 0, 36)
+voidBtn.Position = UDim2.new(0, 10, 0, 58)
+voidBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+voidBtn.BackgroundTransparency = 0.4
+voidBtn.BorderSizePixel = 1
+voidBtn.BorderColor3 = Color3.fromRGB(0, 180, 255)
+voidBtn.Text = "VOID : OFF"
+voidBtn.TextColor3 = Color3.fromRGB(0, 180, 255)
+voidBtn.TextSize = 14
+voidBtn.Font = Enum.Font.Code
+voidBtn.Parent = mainFrame
+
+local voidStatus = Instance.new("TextLabel")
+voidStatus.Size = UDim2.new(0, 210, 0, 36)
+voidStatus.Position = UDim2.new(0, 180, 0, 58)
+voidStatus.BackgroundTransparency = 1
+voidStatus.Text = "[ INACTIVE ]"
+voidStatus.TextColor3 = Color3.fromRGB(120, 120, 120)
+voidStatus.TextSize = 13
+voidStatus.Font = Enum.Font.Code
+voidStatus.TextXAlignment = Enum.TextXAlignment.Left
+voidStatus.Parent = mainFrame
+
+voidBtn.MouseButton1Click:Connect(function()
+    voidActive = not voidActive
+    if voidActive then
+        voidBtn.Text = "VOID : ON"
+        voidBtn.TextColor3 = Color3.fromRGB(0, 255, 180)
+        voidBtn.BorderColor3 = Color3.fromRGB(0, 255, 180)
+        voidStatus.Text = "[ VOID ACTIVE ]"
+        voidStatus.TextColor3 = Color3.fromRGB(0, 255, 180)
+        teleportCount = 0
+        targetCFrame = nil
+        lastTeleport = tick()
+        Workspace.Gravity = 0
+    else
+        voidBtn.Text = "VOID : OFF"
+        voidBtn.TextColor3 = Color3.fromRGB(0, 180, 255)
+        voidBtn.BorderColor3 = Color3.fromRGB(0, 180, 255)
+        voidStatus.Text = "[ INACTIVE ]"
+        voidStatus.TextColor3 = Color3.fromRGB(120, 120, 120)
+        teleportCount = 0
+        targetCFrame = nil
+        if not orbitActive then Workspace.Gravity = 196.2 end
+    end
+end)
+
+-- ===== ORBIT =====
+local orbitActive = false
+local orbitAngle = 0
+local orbitMode = "MEDIUM"
+local orbitRadius = 10
+local orbitSpeed = 1.5
+local lockedTarget = nil
+
+local HEIGHT_MAP = { LOW = -8, MEDIUM = 2.5, HIGH = 12 }
+local modeColors = {
+    HIGH =   { on = Color3.fromRGB(255, 80,  80),  off = Color3.fromRGB(100, 40, 40) },
+    MEDIUM = { on = Color3.fromRGB(255, 200, 0),   off = Color3.fromRGB(100, 80,  0) },
+    LOW =    { on = Color3.fromRGB(0,   220, 120), off = Color3.fromRGB(0,   80, 50) },
+}
+
+local orbitBtn = Instance.new("TextButton")
+orbitBtn.Size = UDim2.new(0, 160, 0, 36)
+orbitBtn.Position = UDim2.new(0, 10, 0, 108)
+orbitBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+orbitBtn.BackgroundTransparency = 0.4
+orbitBtn.BorderSizePixel = 1
+orbitBtn.BorderColor3 = Color3.fromRGB(180, 0, 255)
+orbitBtn.Text = "ORBIT : OFF"
+orbitBtn.TextColor3 = Color3.fromRGB(180, 0, 255)
+orbitBtn.TextSize = 14
+orbitBtn.Font = Enum.Font.Code
+orbitBtn.Parent = mainFrame
+
+local orbitStatus = Instance.new("TextLabel")
+orbitStatus.Size = UDim2.new(0, 210, 0, 36)
+orbitStatus.Position = UDim2.new(0, 180, 0, 108)
+orbitStatus.BackgroundTransparency = 1
+orbitStatus.Text = "[ INACTIVE ]"
+orbitStatus.TextColor3 = Color3.fromRGB(120, 120, 120)
+orbitStatus.TextSize = 13
+orbitStatus.Font = Enum.Font.Code
+orbitStatus.TextXAlignment = Enum.TextXAlignment.Left
+orbitStatus.Parent = mainFrame
+
+local modeBtns = {}
+local modeList = {"HIGH", "MEDIUM", "LOW"}
+for i, mode in ipairs(modeList) do
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 88, 0, 28)
+    btn.Position = UDim2.new(0, 10 + (i-1) * 96, 0, 158)
+    btn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    btn.BackgroundTransparency = 0.4
+    btn.BorderSizePixel = 1
+    btn.BorderColor3 = orbitMode == mode and modeColors[mode].on or modeColors[mode].off
+    btn.Text = mode
+    btn.TextColor3 = orbitMode == mode and modeColors[mode].on or modeColors[mode].off
+    btn.TextSize = 13
+    btn.Font = Enum.Font.Code
+    btn.Parent = mainFrame
+    modeBtns[mode] = btn
+
+    btn.MouseButton1Click:Connect(function()
+        orbitMode = mode
+        for _, m in ipairs(modeList) do
+            modeBtns[m].BorderColor3 = modeColors[m].off
+            modeBtns[m].TextColor3 = modeColors[m].off
+        end
+        btn.BorderColor3 = modeColors[mode].on
+        btn.TextColor3 = modeColors[mode].on
+    end)
+end
+
+-- STUDS
+local studsLabel = Instance.new("TextLabel")
+studsLabel.Size = UDim2.new(0, 60, 0, 28)
+studsLabel.Position = UDim2.new(0, 10, 0, 200)
+studsLabel.BackgroundTransparency = 1
+studsLabel.Text = "STUDS:"
+studsLabel.TextColor3 = Color3.fromRGB(180, 0, 255)
+studsLabel.TextSize = 13
+studsLabel.Font = Enum.Font.Code
+studsLabel.TextXAlignment = Enum.TextXAlignment.Left
+studsLabel.Parent = mainFrame
+
+local studsBox = Instance.new("TextBox")
+studsBox.Size = UDim2.new(0, 55, 0, 28)
+studsBox.Position = UDim2.new(0, 70, 0, 200)
+studsBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+studsBox.BackgroundTransparency = 0.4
+studsBox.BorderSizePixel = 1
+studsBox.BorderColor3 = Color3.fromRGB(180, 0, 255)
+studsBox.Text = "10"
+studsBox.TextColor3 = Color3.fromRGB(220, 100, 255)
+studsBox.TextSize = 13
+studsBox.Font = Enum.Font.Code
+studsBox.ClearTextOnFocus = false
+studsBox.Parent = mainFrame
+
+studsBox.FocusLost:Connect(function()
+    local val = tonumber(studsBox.Text)
+    if val and val > 0 then orbitRadius = val
+    else studsBox.Text = tostring(orbitRadius) end
+end)
+
+-- SPEED
+local speedLabel = Instance.new("TextLabel")
+speedLabel.Size = UDim2.new(0, 60, 0, 28)
+speedLabel.Position = UDim2.new(0, 140, 0, 200)
+speedLabel.BackgroundTransparency = 1
+speedLabel.Text = "SPEED:"
+speedLabel.TextColor3 = Color3.fromRGB(180, 0, 255)
+speedLabel.TextSize = 13
+speedLabel.Font = Enum.Font.Code
+speedLabel.TextXAlignment = Enum.TextXAlignment.Left
+speedLabel.Parent = mainFrame
+
+local speedBox = Instance.new("TextBox")
+speedBox.Size = UDim2.new(0, 55, 0, 28)
+speedBox.Position = UDim2.new(0, 200, 0, 200)
+speedBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+speedBox.BackgroundTransparency = 0.4
+speedBox.BorderSizePixel = 1
+speedBox.BorderColor3 = Color3.fromRGB(180, 0, 255)
+speedBox.Text = "1.5"
+speedBox.TextColor3 = Color3.fromRGB(220, 100, 255)
+speedBox.TextSize = 13
+speedBox.Font = Enum.Font.Code
+speedBox.ClearTextOnFocus = false
+speedBox.Parent = mainFrame
+
+speedBox.FocusLost:Connect(function()
+    local val = tonumber(speedBox.Text)
+    if val and val > 0 then orbitSpeed = val
+    else speedBox.Text = tostring(orbitSpeed) end
+end)
+
+-- RESET TARGET
+local resetBtn = Instance.new("TextButton")
+resetBtn.Size = UDim2.new(0, 120, 0, 28)
+resetBtn.Position = UDim2.new(0, 270, 0, 200)
+resetBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+resetBtn.BackgroundTransparency = 0.4
+resetBtn.BorderSizePixel = 1
+resetBtn.BorderColor3 = Color3.fromRGB(180, 0, 255)
+resetBtn.Text = "CHANGE TARGET"
+resetBtn.TextColor3 = Color3.fromRGB(180, 0, 255)
+resetBtn.TextSize = 11
+resetBtn.Font = Enum.Font.Code
+resetBtn.Parent = mainFrame
+
+resetBtn.MouseButton1Click:Connect(function()
+    lockedTarget = nil
+    orbitStatus.Text = "[ TARGET RESET ]"
+    orbitStatus.TextColor3 = Color3.fromRGB(255, 200, 0)
+end)
+
+-- Note
+local note = Instance.new("TextLabel")
+note.Size = UDim2.new(1, -20, 0, 24)
+note.Position = UDim2.new(0, 10, 0, 238)
+note.BackgroundTransparency = 1
+note.Text = "TARGET LOCKS ON NEAREST — RESET TO CHANGE"
+note.TextColor3 = Color3.fromRGB(60, 60, 65)
+note.TextSize = 11
+note.Font = Enum.Font.Code
+note.TextXAlignment = Enum.TextXAlignment.Left
+note.Parent = mainFrame
+
+-- Toggle ORBIT
+orbitBtn.MouseButton1Click:Connect(function()
+    orbitActive = not orbitActive
+    if orbitActive then
+        orbitBtn.Text = "ORBIT : ON"
+        orbitBtn.TextColor3 = Color3.fromRGB(220, 100, 255)
+        orbitBtn.BorderColor3 = Color3.fromRGB(220, 100, 255)
+        orbitAngle = 0
+        lockedTarget = nil
+        Workspace.Gravity = 0
+    else
+        orbitBtn.Text = "ORBIT : OFF"
+        orbitBtn.TextColor3 = Color3.fromRGB(180, 0, 255)
+        orbitBtn.BorderColor3 = Color3.fromRGB(180, 0, 255)
+        orbitStatus.Text = "[ INACTIVE ]"
+        orbitStatus.TextColor3 = Color3.fromRGB(120, 120, 120)
+        lockedTarget = nil
+        local myChar = player.Character
+        if myChar then
+            local myHuman = myChar:FindFirstChild("Humanoid")
+            if myHuman then myHuman.PlatformStand = false end
+        end
+        if not voidActive then Workspace.Gravity = 196.2 end
+    end
+end)
+
+-- ===== MINIMIZE (thu đến title) =====
+topLine.MouseButton1Click:Connect(function()
+    isMinimized = not isMinimized
+    local tweenInfo = TweenInfo.new(0.35, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+    if isMinimized then
+        TweenService:Create(mainFrame, tweenInfo, {
+            Size = UDim2.new(0, 420, 0, MINI_HEIGHT)
+        }):Play()
+        topLine.BackgroundColor3 = Color3.fromRGB(0, 220, 255)
+    else
+        TweenService:Create(mainFrame, tweenInfo, {
+            Size = UDim2.new(0, 420, 0, FULL_HEIGHT)
+        }):Play()
+        topLine.BackgroundColor3 = Color3.fromRGB(0, 180, 255)
+    end
+end)
+
+-- ===== MAIN LOOP =====
+RunService.Heartbeat:Connect(function(dt)
+
+    -- VOID
+    if voidActive then
+        local character = player.Character
+        if character then
+            local rootPart = character:FindFirstChild("HumanoidRootPart")
+            local humanoid = character:FindFirstChild("Humanoid")
+            if rootPart and humanoid then
+                if targetCFrame then rootPart.CFrame = targetCFrame end
+                local now = tick()
+                if now - lastTeleport >= 0.05 then
+                    lastTeleport = now
+                    teleportCount = teleportCount + 1
+                    local spread = BASE_SPREAD + (teleportCount * SPREAD_STEP)
+                    local angle = math.random() * 2 * math.pi
+                    local dx = math.cos(angle) * spread
+                    local dz = math.sin(angle) * spread
+                    local dy = math.random(VOID_MIN_Y, VOID_MAX_Y)
+                    targetCFrame = CFrame.new(dx, dy, dz)
+                    humanoid.PlatformStand = true
+                    rootPart.CFrame = targetCFrame
+                    task.defer(function()
+                        if humanoid then humanoid.PlatformStand = false end
+                    end)
+                    voidStatus.Text = string.format("[ TP #%d | Y:%.0f ]", teleportCount, dy)
+                end
+            end
+        end
+    end
+
+    -- ORBIT
+    if orbitActive then
+        local myChar = player.Character
+        if not myChar then return end
+        local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+        local myHuman = myChar:FindFirstChild("Humanoid")
+        if not myRoot or not myHuman then return end
+
+        if lockedTarget == nil or not lockedTarget.Character then
+            local nearestDist = math.huge
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= player and p.Character then
+                    local theirRoot = p.Character:FindFirstChild("HumanoidRootPart")
+                    if theirRoot then
+                        local dist = (theirRoot.Position - myRoot.Position).Magnitude
+                        if dist < nearestDist then
+                            nearestDist = dist
+                            lockedTarget = p
+                        end
+                    end
+                end
+            end
+        end
+
+        if lockedTarget and lockedTarget.Character then
+            local targetRoot = lockedTarget.Character:FindFirstChild("HumanoidRootPart")
+            if targetRoot then
+                orbitAngle = orbitAngle + dt * orbitSpeed
+                local targetFootY = targetRoot.Position.Y - 3
+                local heightOffset = HEIGHT_MAP[orbitMode]
+                local center = targetRoot.Position
+                local ox = math.cos(orbitAngle) * orbitRadius
+                local oz = math.sin(orbitAngle) * orbitRadius
+                local newPos = Vector3.new(
+                    center.X + ox,
+                    targetFootY + heightOffset,
+                    center.Z + oz
+                )
+                myHuman.PlatformStand = true
+                myRoot.CFrame = CFrame.new(newPos, Vector3.new(center.X, newPos.Y, center.Z))
+                orbitStatus.Text = string.format("[ %s ][ %s ]", orbitMode, lockedTarget.Name)
+                orbitStatus.TextColor3 = Color3.fromRGB(220, 100, 255)
+            end
+        else
+            orbitStatus.Text = "[ NO PLAYER FOUND ]"
+            orbitStatus.TextColor3 = Color3.fromRGB(255, 80, 80)
+        end
+    end
+end)
+
+-- ===== DRAG (chỉ ở title) =====
+local dragging = false
+local dragStart = nil
+local startPos = nil
+
+local function blockCamera(_, inputState, _)
+    if inputState == Enum.UserInputState.Begin then
+        return Enum.ContextActionResult.Sink
+    end
+    return Enum.ContextActionResult.Pass
+end
+
+title.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or
+       input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = mainFrame.Position
+        ContextActionService:BindAction(
+            "BlockCameraDrag", blockCamera, false,
+            Enum.UserInputType.MouseMovement,
+            Enum.UserInputType.Touch
+        )
+    end
+end)
+
+title.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or
+       input.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
+        ContextActionService:UnbindAction("BlockCameraDrag")
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or
+       input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
+        mainFrame.Position = UDim2.new(
+            startPos.X.Scale, startPos.X.Offset + delta.X,
+            startPos.Y.Scale, startPos.Y.Offset + delta.Y
+        )
+    end
+end)
