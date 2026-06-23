@@ -63,8 +63,8 @@ local voidActive = false
 local lastTeleport = 0
 local targetCFrame = nil
 local teleportCount = 0
-local VOID_MIN_Y = -220000
-local VOID_MAX_Y = -180000
+local VOID_MIN_Y = -2500000
+local VOID_MAX_Y = -1500000
 local BASE_SPREAD = 500
 local SPREAD_STEP = 800
 
